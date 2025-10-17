@@ -96,17 +96,6 @@ def lambda_handler(event, context):
             'body': json.dumps({'error': str(e)})
         }
 
-def extract_file_type_from_url(url):
-    """Extract file type from URL"""
-    try:
-        if not url or url == '/':
-            return '-'
-        # Extract file extension from URL
-        if '.' in url:
-            return url.split('.')[-1].split('?')[0].split('#')[0]
-        return '-'
-    except:
-        return '-'
 
 def parse_nginx_log_line(line):
     """Parse CDN log line using the same regex that was working before"""
@@ -446,7 +435,7 @@ def parse_log_lines_vectorized(lines):
                         'response_bytes': parsed.get('response_bytes', 0),
                         'cache_status': parsed.get('cache_status', '-'),
                         'user_agent': parsed.get('user_agent', '-'),
-                        'file_type': extract_file_type_from_url(parsed.get('request_url', '/')),
+                        'file_type': parsed.get('file_type', '-'),
                         'access_ip': parsed.get('access_ip', parsed.get('client_ip', '-')),
                         'year': year,
                         'month': month,
@@ -522,7 +511,7 @@ def parse_log_line(line):
                                     'response_bytes': size,
                                     'cache_status': '-',
                                     'user_agent': '-',
-                                    'file_type': extract_file_type_from_url(url),
+                                    'file_type': '-',
                                     'access_ip': client_ip,
                                     'year': year,
                                     'month': month,

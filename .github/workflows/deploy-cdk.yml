@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch: # Manual trigger
 
+env:
+  AWS_REGION: me-central-1
+  CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -18,7 +22,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
         
     - name: Install dependencies
@@ -32,10 +36,15 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: me-central-1
+        aws-region: ${{ env.AWS_REGION }}
         
     - name: CDK Bootstrap (if needed)
-      run: npx cdk bootstrap
+      run: npx cdk bootstrap aws://${{ env.CDK_DEFAULT_ACCOUNT }}/${{ env.AWS_REGION }}
       
     - name: CDK Deploy
+      if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
       run: npx cdk deploy --all --require-approval never
+      
+    - name: CDK Diff (for PRs)
+      if: github.event_name == 'pull_request'
+      run: npx cdk diff || true
