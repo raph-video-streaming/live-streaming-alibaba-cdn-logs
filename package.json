@@ -8,7 +8,11 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "bootstrap": "cdk bootstrap",
+    "bootstrap:ci": "cdk bootstrap --app cdk.ci.json",
+    "deploy": "cdk deploy --all --require-approval never",
+    "deploy:ci": "cdk deploy --all --require-approval never --app cdk.ci.json"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
