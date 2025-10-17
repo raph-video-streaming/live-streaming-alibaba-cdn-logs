@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
 from functools import partial
 
+
 def lambda_handler(event, context):
     try:
         domain = event.get('domain', 'alibaba-live.servers8.com')
@@ -94,6 +95,72 @@ def lambda_handler(event, context):
             'statusCode': 500,
             'body': json.dumps({'error': str(e)})
         }
+
+def extract_file_type_from_url(url):
+    """Extract file type from URL"""
+    try:
+        if not url or url == '/':
+            return '-'
+        # Extract file extension from URL
+        if '.' in url:
+            return url.split('.')[-1].split('?')[0].split('#')[0]
+        return '-'
+    except:
+        return '-'
+
+def parse_nginx_log_line(line):
+    """Parse CDN log line using the same regex that was working before"""
+    try:
+        # Skip empty lines
+        if not line.strip():
+            return None
+        
+        # Use the correct regex pattern for the actual log format
+        import re
+        # Pattern: [datetime timezone] IP - response_time "referrer" "method url" status request_size response_size cache_status "user_agent" "content_type" access_ip
+        pattern = r'\[([^\s]+)\s+([^\]]+)\]\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+"([^"]*)"\s+"([^\s]+)\s+([^"]*)"\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+([^\s]+)\s+"([^"]*)"\s+"([^"]*)"\s+([^\s]+)'
+        
+        match = re.match(pattern, line)
+        if not match:
+            return None
+        
+        # Extract matched groups
+        groups = match.groups()
+        
+        # Helper functions
+        def safe_int(value, default=0):
+            try:
+                return int(value) if str(value).isdigit() else default
+            except:
+                return default
+        
+        def safe_strip(value, default='-'):
+            try:
+                return value.strip('"\'') if value else default
+            except:
+                return default
+        
+        # Map groups to fields based on actual log format
+        # Format: [datetime timezone] IP - response_time "referrer" "method url" status request_size response_size cache_status "user_agent" "content_type" access_ip
+        # Groups: 0=datetime, 1=timezone, 2=IP, 3=dash, 4=response_time, 5=referrer, 6=method, 7=url, 8=status, 9=request_size, 10=response_size, 11=cache_status, 12=user_agent, 13=content_type, 14=access_ip
+        return {
+            'client_ip': groups[2] if len(groups) > 2 else '-',           # IP
+            'proxy_ip': groups[3] if len(groups) > 3 else '-',            # - (dash)
+            'response_time': safe_int(groups[4] if len(groups) > 4 else '0'),  # response_time
+            'referrer': safe_strip(groups[5] if len(groups) > 5 else '-'),     # referrer
+            'http_method': safe_strip(groups[6] if len(groups) > 6 else 'GET'), # method
+            'request_url': safe_strip(groups[7] if len(groups) > 7 else '/'),  # url
+            'http_status': safe_int(groups[8] if len(groups) > 8 else '200'),  # status
+            'request_bytes': safe_int(groups[9] if len(groups) > 9 else '0'), # request_size
+            'response_bytes': safe_int(groups[10] if len(groups) > 10 else '0'), # response_size
+            'cache_status': groups[11] if len(groups) > 11 else '-',      # cache_status
+            'user_agent': safe_strip(groups[12] if len(groups) > 12 else '-'), # user_agent
+            'access_ip': groups[14] if len(groups) > 14 else groups[2] if len(groups) > 2 else '-' # access_ip (group 14)
+        }
+        
+    except Exception as e:
+        return None
+
 
 def configure_aliyun_cli():
     client = boto3.client('secretsmanager')
@@ -362,39 +429,25 @@ def parse_log_lines_vectorized(lines):
                 # Extract year, month, day for partitioning
                 year, month, day = extract_partition_columns(date_time_str)
                 
-                # Use simple split approach for better compatibility
-                fields = line.split(' ')
-                if len(fields) >= 10:
-                    # Helper function for safe int conversion
-                    def safe_int(value, default=0):
-                        try:
-                            return int(value) if value.isdigit() else default
-                        except:
-                            return default
-                    
-                    # Helper function for safe string cleaning
-                    def safe_strip(value, default='-'):
-                        try:
-                            return value.strip('"') if value else default
-                        except:
-                            return default
-                    
+                # Parse log line properly handling quoted strings
+                parsed = parse_nginx_log_line(line)
+                if parsed:
                     records.append({
                         'date_time': date_time_str,
                         'timezone': timezone,
-                        'client_ip': fields[2] if len(fields) > 2 else '-',
-                        'proxy_ip': fields[3] if len(fields) > 3 else '-',
-                        'response_time': safe_int(fields[4] if len(fields) > 4 else '0'),
-                        'referrer': safe_strip(fields[5] if len(fields) > 5 else '-'),
-                        'http_method': safe_strip(fields[6] if len(fields) > 6 else 'GET'),
-                        'request_url': safe_strip(fields[7] if len(fields) > 7 else '/'),
-                        'http_status': safe_int(fields[8] if len(fields) > 8 else '200'),
-                        'request_bytes': safe_int(fields[9] if len(fields) > 9 else '0'),
-                        'response_bytes': safe_int(fields[10] if len(fields) > 10 else '0'),
-                        'cache_status': fields[11] if len(fields) > 11 else '-',
-                        'user_agent': safe_strip(fields[12] if len(fields) > 12 else '-'),
-                        'file_type': safe_strip(fields[13] if len(fields) > 13 else '-'),
-                        'access_ip': fields[14] if len(fields) > 14 else fields[2] if len(fields) > 2 else '-',
+                        'client_ip': parsed.get('client_ip', '-'),
+                        'proxy_ip': parsed.get('proxy_ip', '-'),
+                        'response_time': parsed.get('response_time', 0),
+                        'referrer': parsed.get('referrer', '-'),
+                        'http_method': parsed.get('http_method', 'GET'),
+                        'request_url': parsed.get('request_url', '/'),
+                        'http_status': parsed.get('http_status', 200),
+                        'request_bytes': parsed.get('request_bytes', 0),
+                        'response_bytes': parsed.get('response_bytes', 0),
+                        'cache_status': parsed.get('cache_status', '-'),
+                        'user_agent': parsed.get('user_agent', '-'),
+                        'file_type': extract_file_type_from_url(parsed.get('request_url', '/')),
+                        'access_ip': parsed.get('access_ip', parsed.get('client_ip', '-')),
                         'year': year,
                         'month': month,
                         'day': day
@@ -469,7 +522,7 @@ def parse_log_line(line):
                                     'response_bytes': size,
                                     'cache_status': '-',
                                     'user_agent': '-',
-                                    'file_type': '-',
+                                    'file_type': extract_file_type_from_url(url),
                                     'access_ip': client_ip,
                                     'year': year,
                                     'month': month,
@@ -484,46 +537,33 @@ def parse_log_line(line):
         date_time_str = datetime_parts[0] if len(datetime_parts) > 0 else ''
         timezone = datetime_parts[1] if len(datetime_parts) > 1 else '+0000'
         
-        # Split the line by spaces, but be more flexible with field count
-        fields = line.split(' ')
-        if len(fields) < 10:  # Reduced minimum field requirement
-            return None
+        # Use the same parsing logic as parse_nginx_log_line
+        parsed = parse_nginx_log_line(line)
+        if parsed:
+            year, month, day = extract_partition_columns(date_time_str)
+            
+            return {
+                'date_time': date_time_str,
+                'timezone': timezone,
+                'client_ip': parsed.get('client_ip', '-'),
+                'proxy_ip': parsed.get('proxy_ip', '-'),
+                'response_time': parsed.get('response_time', 0),
+                'referrer': parsed.get('referrer', '-'),
+                'http_method': parsed.get('http_method', 'GET'),
+                'request_url': parsed.get('request_url', '/'),
+                'http_status': parsed.get('http_status', 200),
+                'request_bytes': parsed.get('request_bytes', 0),
+                'response_bytes': parsed.get('response_bytes', 0),
+                'cache_status': parsed.get('cache_status', '-'),
+                'user_agent': parsed.get('user_agent', '-'),
+                'file_type': extract_file_type_from_url(parsed.get('request_url', '/')),
+                'access_ip': parsed.get('access_ip', parsed.get('client_ip', '-')),
+                'year': year,
+                'month': month,
+                'day': day
+            }
         
-        # More robust field extraction
-        def safe_int(value, default=0):
-            try:
-                return int(value) if value.isdigit() else default
-            except:
-                return default
-        
-        def safe_strip(value, default='-'):
-            try:
-                return value.strip('"') if value else default
-            except:
-                return default
-        
-        year, month, day = extract_partition_columns(date_time_str)
-        
-        return {
-            'date_time': date_time_str,
-            'timezone': timezone,
-            'client_ip': fields[2] if len(fields) > 2 else '-',
-            'proxy_ip': fields[3] if len(fields) > 3 else '-',
-            'response_time': safe_int(fields[4] if len(fields) > 4 else '0'),
-            'referrer': safe_strip(fields[5] if len(fields) > 5 else '-'),
-            'http_method': safe_strip(fields[6] if len(fields) > 6 else 'GET'),
-            'request_url': safe_strip(fields[7] if len(fields) > 7 else '/'),
-            'http_status': safe_int(fields[8] if len(fields) > 8 else '200'),
-            'request_bytes': safe_int(fields[9] if len(fields) > 9 else '0'),
-            'response_bytes': safe_int(fields[10] if len(fields) > 10 else '0'),
-            'cache_status': fields[11] if len(fields) > 11 else '-',
-            'user_agent': safe_strip(fields[12] if len(fields) > 12 else '-'),
-            'file_type': safe_strip(fields[13] if len(fields) > 13 else '-'),
-            'access_ip': fields[14] if len(fields) > 14 else fields[2] if len(fields) > 2 else '-',
-            'year': year,
-            'month': month,
-            'day': day
-        }
+        return None
     except Exception as e:
         print(f"Error parsing line: {line[:100]}... Error: {e}")
         return None

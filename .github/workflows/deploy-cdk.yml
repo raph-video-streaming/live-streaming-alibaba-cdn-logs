@@ -1,0 +1,68 @@
+name: Deploy CDK to me-central-1
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'lib/**'
+      - 'bin/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'cdk.json'
+      - 'tsconfig.json'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'lib/**'
+      - 'bin/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'cdk.json'
+      - 'tsconfig.json'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: me-central-1
+  CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: 'package-lock.json'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build TypeScript
+      run: npm run build
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Bootstrap CDK (if needed)
+      run: npx cdk bootstrap aws://${{ env.CDK_DEFAULT_ACCOUNT }}/${{ env.AWS_REGION }}
+
+    - name: CDK Synth
+      run: npx cdk synth
+
+    - name: CDK Deploy
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+      run: npx cdk deploy --require-approval never
+
+    - name: CDK Diff (for PRs)
+      if: github.event_name == 'pull_request'
+      run: npx cdk diff || true
