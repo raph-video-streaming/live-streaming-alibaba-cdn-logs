@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "scripts": {
     "build": "tsc",
-    "bootstrap": "cdk bootstrap --profile spl",
-    "deploy": "cdk deploy --profile spl --require-approval never",
-    "synth": "cdk synth --profile spl"
+    "bootstrap": "cdk bootstrap",
+    "deploy": "cdk deploy --require-approval never",
+    "synth": "cdk synth"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
