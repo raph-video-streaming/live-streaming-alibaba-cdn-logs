@@ -144,6 +144,7 @@ def parse_nginx_log_line(line):
             'response_bytes': safe_int(groups[10] if len(groups) > 10 else '0'), # response_size
             'cache_status': groups[11] if len(groups) > 11 else '-',      # cache_status
             'user_agent': safe_strip(groups[12] if len(groups) > 12 else '-'), # user_agent
+            'file_type': safe_strip(groups[13] if len(groups) > 13 else '-'), # content_type from log
             'access_ip': groups[14] if len(groups) > 14 else groups[2] if len(groups) > 2 else '-' # access_ip (group 14)
         }
         
@@ -545,7 +546,7 @@ def parse_log_line(line):
                 'response_bytes': parsed.get('response_bytes', 0),
                 'cache_status': parsed.get('cache_status', '-'),
                 'user_agent': parsed.get('user_agent', '-'),
-                'file_type': extract_file_type_from_url(parsed.get('request_url', '/')),
+                'file_type': parsed.get('file_type', '-'),
                 'access_ip': parsed.get('access_ip', parsed.get('client_ip', '-')),
                 'year': year,
                 'month': month,
