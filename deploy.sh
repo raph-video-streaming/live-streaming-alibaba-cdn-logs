@@ -13,9 +13,6 @@ echo "🔨 Building Lambda layers..."
 chmod +x build-layers.sh
 ./build-layers.sh
 
-# Build TypeScript
-echo "🔧 Building TypeScript..."
-npm run build
 
 # Bootstrap CDK (if needed)
 echo "🎆 Bootstrapping CDK..."

@@ -60,7 +60,7 @@ export class AlibabaCdnLogsStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       architecture: lambda.Architecture.ARM_64,
       handler: 'lambda_function.lambda_handler',
-      code: lambda.Code.fromAsset('lib/lambda'),
+      code: lambda.Code.fromAsset('lib/lambda/log_downloader'),
       role: lambdaRole,
       layers: [pandasLayer, aliyunLayer],
       timeout: cdk.Duration.minutes(15),  // Maximum allowed timeout for Lambda

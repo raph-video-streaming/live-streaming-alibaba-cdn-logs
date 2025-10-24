@@ -1,6 +1,27 @@
 # Alibaba CDN Log Processor - CDK Deployment
 
+Automated AWS Lambda function to download Alibaba CDN logs, convert to Parquet format, and store in S3 with partitioned structure.
 AWS CDK deployment for Alibaba CDN log processing with automated EventBridge scheduling.
+## Features
+
+- Downloads CDN logs from Alibaba Cloud API
+- Converts gzipped text logs to compressed Parquet format
+- Stores in S3 with partitioned structure: `year=YYYY/month=MM/day=DD/`
+- Optimized for fast processing with minimal memory usage
+- Secure credential management via AWS Secrets Manager
+
+## Architecture
+
+```
+Lambda Function (ARM64) + Aliyun CLI Layer
+    ↓
+Alibaba CDN API → Download .gz logs
+    ↓
+Parse & Convert → Parquet (Snappy compression)
+    ↓
+S3 Upload → s3://spl-live-cdn-logs/alibaba-cdn/alibaba-cdn_parquet/
+```
+
 
 ## Quick Deploy
 
@@ -19,11 +40,11 @@ cd cdk-deployment
 
 ## Current Status
 
-⚠️ **Known Issues:**
-- AWS managed pandas layer not available in me-central-1 region
-- EventBridge rules defined in CDK but may not appear in Console until TypeScript is compiled
-- Lambda performance: 9+ minutes to process and convert logs to Parquet
-- Date format compatibility issues with existing Parquet schema
+Deploy 2 stacks:
+* **AlibabaCdnLogsStack** : to deploy the lambda and download the logs in S3
+* **ParquetConversionStack** : to parse the gz logs and convert them into parquet files using s3 event triggers and lambda
+
+(the other stack AlibabaCdnAthenaStack is just for historical record to see how to insert table in cdk )
 
 ## Manual Steps
 
@@ -37,14 +58,9 @@ npm install
 ./build-layers.sh
 ```
 
-3. **Compile TypeScript:**
-```bash
-npm run build
-```
-
 4. **Deploy:**
 ```bash
-export AWS_PROFILE=spl && cdk deploy --require-approval never
+export AWS_PROFILE=spl && cdk deploy AlibabaCdnLogsStack ParquetConversionStack
 ```
 
 ## Test
